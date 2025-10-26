@@ -348,7 +348,7 @@ The PredictiveScan() function implements a simple loop scanning columns in front
 
 ## Telemetry and Analysis
 
-Running the simulation creates the CSV file called autopilot_telemetry.csv. The columns are shown below.
+The simulation logs telemetry to autopilot_telemetry.csv. The columns are shown below.
 
 ```
 time	stage	altitude	x	target_x	vx	vy	thr	side	angle
@@ -366,7 +366,7 @@ side = side thrust (-1.0=left, +1.0=right)
 angle = pitch angle
 ```
 
-This data can be used for telemetry analysis of the autopilot. The autopilot logic is structured in discrete stages representing key phases of a lunar descent. The stages are shown on the altitude versus time plot shown below.
+Running the simulation creates the CSV file called autopilot_telemetry.csv which can be used for telemetry analysis of the autopilot. The autopilot logic is structured in discrete stages representing key phases of a lunar descent. The stages are shown on the altitude versus time plot shown below.
 
 ![](autopilot-altitude-stages-plot.png)
 
@@ -384,21 +384,6 @@ The main engine throttle and side thrust profiles plotted again time during an a
 The pitch angle versus time plot is shown below. There is a rapid correction in pitch angle at the start of the simulation, after which the lander stabilizes and transitions smoothly to a pitch angle near zero.
 
 ![](angle_plot.png)
-
-
-### Expected Telemetry Behaviour
-
-The simulation logs telemetry to `autopilot_telemetry.csv`. Typical plots and their expected shapes are described below; these help verify the autopilot behaviour.
-
-| Plot (column) | Expected Shape | Physical Meaning / Diagnoses |
-|---|---:|---|
-| **Altitude vs Time** (`altitude`) | Smooth, generally monotonic descent; concave-down near surface (flare) | A controlled descent. A climb or rising altitude indicates too much thrust or wrong thrust vector. |
-| **Vertical Velocity vs Time** (`vy`) | Piecewise plateaus with transitions (staircase) | Each plateau corresponds to a staged `target_vy`. Sharp spikes imply thrust saturation or sudden attitude changes. Smooth the `target_vy` schedule to remove steps. |
-| **Horizontal Velocity vs Time** (`vx`) | Decay to near-zero as lateral control works | If `vx` oscillates or grows, lateral gains are too high/unstable or target locking is misconfigured. |
-| **Throttle (thrust_level) vs Time** (`thr`) | Oscillatory but bounded; higher near flare, lower during steady glide | Throttle reacts to `vy` error and may oscillate if PD gains are too aggressive. Sudden jumps correlate with attitude transients. |
-| **Side Thruster vs Time** (`side_thrust_level`) | Smooth adjustments; short bursts for lateral corrections | Repeated switching indicates underdamped lateral controller or noisy target. |
-| **Pitch Angle vs Time** (`theta`) | Damped transient(s) → converge to 0° | Large initial swings indicate aggressive lateral/attitude commands. Persistent oscillation means attitude controller is underdamped; slow return indicates overdamped/low gains. |
-| **Angular Rate vs Time** (`omega`) | Peaks during transients then damps to near-zero | Large steady `omega` is bad (rotating): tune `Kp`/`Kd` or add stronger damping. |
 
 These plots confirm that the autopilot is correctly balancing thrust, descent rate, and orientation.
 
