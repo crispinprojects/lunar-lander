@@ -1,6 +1,6 @@
 /**
  * main.c
- * Lunar Lander simulation — v1.0.0
+ * Lunar Lander simulation — v1.0.1
  *
  * Author: Alan Crispin (crispinalan)
  * License: GPL-3.0 
@@ -18,7 +18,7 @@
 #include <time.h>
 #include <math.h>
 #include <string.h>
-//#include <stdio.h>
+
 
 #define HAZARD_CLEAR     0
 #define HAZARD_WARNING   1
@@ -68,6 +68,7 @@ const float MIN_MASS_KG        = 800.0f;     // prevents instability when fuel i
 #define ALT_VY_HIGH2           150.0f  //second stage height (stage 2)
 #define ALT_VY_HIGH3            80.0f  //third stage height (stage 3)
 #define ALT_VY_HIGH4            30.0f  //fourth stage height (stage 4)
+#define ALT_VY_FINAL			0.0f
 #define VY_TARGET1               4.0f  //desired descent velocity (m/s) for stage 1 (higher target_vy for higher altitude: efficient glide)
 #define VY_TARGET2               3.0f  //desired descent velocity (m/s) for stage 2
 #define VY_TARGET3               2.0f  //desired descent velocity (m/s) for stage 3
@@ -142,12 +143,13 @@ const float ROLL_RATE_TOL = 0.12f;     // rad/s: rate tolerance
 
 // Debug and bleep
 #define DEBUG_FRAME_INTERVAL    120 //number of frames between telemetry printouts e.g. 60
-#define BLEEP_INTERVAL			1200 //number of frames between audio bleeps 60 x10
-bool is_bleeping =true;				//bleeping to indicate landing in progress
-//----------------------------------------------------------------------
-// Structures
-//----------------------------------------------------------------------
 
+//======================================================================
+// Structures
+//======================================================================
+/**
+ * @brief Represents the lunar lander state.
+ */
 typedef struct {
     float x, y;
     float vx, vy;
@@ -175,7 +177,9 @@ typedef struct {
     double timestamp;
 } CandidateSite;
 
-// AutopilotState (add)
+/**
+ * @brief Predictive autopilot state variables.
+ */
 typedef struct {
 	bool enabled;
     int stage;
@@ -194,12 +198,17 @@ typedef struct {
     CandidateSite site_mem[16]; // small ring buffer of previously-scored sites
 } AutopilotState;
 
-
+/**
+ * @brief Camera system for world to screen transforms.
+ */
 typedef struct {
 	float x; 
 	float y; 
 } Camera;
 
+/**
+ * @brief Hazard/terrain structure for collision detection.
+ */
 typedef struct {
 	float x;
 	float y; 
@@ -207,9 +216,9 @@ typedef struct {
 	float h; 
 } Hazard;
 
-//----------------------------------------------------------------------
+//======================================================================
 //Declarations
-//----------------------------------------------------------------------
+//======================================================================
 void PredictiveScan(const Lander *l, const Hazard *hazards, int hazard_count,
                     AutopilotState *ap, float scan_ahead, float grid_spacing,
                     int grid_cols, int grid_rows);
@@ -228,24 +237,29 @@ float ComputeLandingZoneSafetyAtX(const Lander* l,
 
 
 //======================================================================
-//  world to screen 
+
+/**
+ * @brief Convert world coordinates to screen space.
+ */
 static inline void WorldToScreen(const Camera* cam, float wx, float wy, SDL_FRect* out) {
     out->x = wx - (cam->x - (float)WINDOW_WIDTH / 2.0f);
     out->y = wy - (cam->y - (float)WINDOW_HEIGHT / 2.0f);
     out->w = out->h = 0.0f;
 }
 
-//======================================================================
+/**
+ * @brief Initialize the lander state for a new simulation.
+ */
 void InitLander(Lander* l) {   
-    l->x = 2000.0f;    
+    l->x = 3000.0f;    
     //l->y = SURFACE_Y - 200.0f;
     l->y = 100.0f; 
     l->vx =10.0f; //try vx =20m/s faster entry to moon atmosphere
     l->vy = 0.0f;
     l->fuel = 300.0f;           // abstract units (mass calculations)
     l->dry_mass = DRY_MASS_KG;   // fuel units
-    //l->theta = 0.0f;    // upright
-    l->theta = 16.0f * M_PI / 180.0f;  //16 degree on entry to moon atmosphere
+    l->theta = 0.0f;    // upright
+    //l->theta = 16.0f * M_PI / 180.0f;  //16 degree on entry to moon atmosphere
 	l->omega = 0.0f;	 
     // visual flags
     l->is_landed = false;
@@ -257,18 +271,19 @@ void InitLander(Lander* l) {
     l->right_thruster = false;
 }
 
-
-//======================================================================
+/**
+ * @brief Check if rectangles overlap
+ */
 
 static bool RectsOverlap(float ax, float ay, float aw, float ah,
                          float bx, float by, float bw, float bh) {
     return (ax < bx + bw) && (ax + aw > bx) && (ay < by + bh) && (ay + ah > by);
 }
 
-//======================================================================
 
-// Compute roll PD torque and map to side_thrust_level [-ROLL_MAX_THR..ROLL_MAX_THR]
-// target_theta in radians, positive = clockwise rotation desired
+/**
+ * @brief Compute angular acceleration control for pitch stabilization.
+ */
 void ComputeRollControl(Lander *l, AutopilotState *ap, float target_theta, float dt)
 {
     if (!l || dt <= 0.0f) return;
@@ -297,7 +312,16 @@ void ComputeRollControl(Lander *l, AutopilotState *ap, float target_theta, float
     l->side_thrust_level = side_cmd;
 }
 
-//======================================================================
+/**
+ * @brief Integrate lander physics using semi-implicit Euler.
+ *
+ * Includes translational and rotational dynamics.
+ * The moment of inertia is approximated for a rectangular body:
+ * \f[
+ * I = \frac{1}{12} m (w^2 + h^2)
+ * \f]
+ * where `m` is the instantaneous mass (including fuel).
+ */
 void StepLander(Lander *lander, double dt)
 {
     if (!lander) return;
@@ -382,7 +406,9 @@ void StepLander(Lander *lander, double dt)
 }
 
 
-//======================================================================
+/**
+ * @brief Collision check with terrain hazards.
+ */
 static void CheckCollisions(Lander* l, Hazard hazards[], int count) {
     float w = 20.0f, h = 20.0f;
     float left = l->x - w * 0.5f;
@@ -404,8 +430,10 @@ static void CheckCollisions(Lander* l, Hazard hazards[], int count) {
         l->y = SURFACE_Y;
     }
 }
-//=====================================================================
-// Camera follow: horizontal follows lander, vertical fixed near surface
+
+/**
+ * @brief Camera follow: horizontal follows lander, vertical fixed near surface
+ */
 static void UpdateCamera(const Lander* lander, Camera* cam) {
     float target_x = lander->x + CAMERA_LEAD_PIXELS;
     float target_y = SURFACE_Y - (float)WINDOW_HEIGHT / 2.0f + CAMERA_VERTICAL_BIAS;
@@ -426,9 +454,10 @@ static void UpdateCamera(const Lander* lander, Camera* cam) {
     if (cam->y > max_cam_y) cam->y = max_cam_y;
 }
 
-//======================================================================
 
-//DrawLander: draws a filled rotated rectangle and flames 
+/**
+ * @brief DrawLander: draws a filled rotated rectangle and flames
+ */
 static void DrawLander(SDL_Renderer* ren, const Lander* l, const Camera* c)
 {
     if (!ren || !l || !c) return;
@@ -450,7 +479,7 @@ static void DrawLander(SDL_Renderer* ren, const Lander* l, const Camera* c)
     float cs = cosf(theta);
     float sn = sinf(theta);
 
-    // local corners relative to center (clockwise or whatever)
+    // local corners relative to center (clockwise)
     // define rectangle in local coordinates (centered)
     float lx[4], ly[4];
     lx[0] = -half; ly[0] = -half;   // top-left
@@ -588,8 +617,9 @@ static void DrawLander(SDL_Renderer* ren, const Lander* l, const Camera* c)
     }
 }
 
-//=====================================================================
-// Draw landscape (uses WorldToScreen for consistency)
+/**
+ * @brief Draw landscape: draws lunar surface(uses WorldToScreen for consistency)
+ */
 static void DrawLandscape(SDL_Renderer* r, const Camera* c, Hazard hazards[], int hc) {
     SDL_FRect surfScreen;
     WorldToScreen(c, 0.0f, SURFACE_Y, &surfScreen);
@@ -612,8 +642,10 @@ static void DrawLandscape(SDL_Renderer* r, const Camera* c, Hazard hazards[], in
         SDL_RenderFillRect(r, &hr);
     }
 }
-//======================================================================
 
+/**
+ * @brief Draw lateral x-axis positions below the lander returned from predictive scan
+ */
 static void DrawPredictiveScanOverlay(SDL_Renderer *r, const Camera *c,
                                       const AutopilotState *ap,
                                       const Hazard *hazards, int hazard_count)
@@ -658,8 +690,10 @@ static void DrawPredictiveScanOverlay(SDL_Renderer *r, const Camera *c,
     }
 }
 
-//======================================================================
-// render text for  HUD 
+
+/**
+ * @brief render text for  HUD 
+ */
 static void render_text(SDL_Renderer *ren, TTF_Font *font, const char *text, float x, float y)
 {
     if (!ren || !font || !text) return;
@@ -674,7 +708,10 @@ static void render_text(SDL_Renderer *ren, TTF_Font *font, const char *text, flo
     SDL_DestroyTexture(tex);
     SDL_DestroySurface(surf);
 }
-//=======================================================================
+
+/**
+ * @brief draw HUD 
+ */
 static void DrawHUD(SDL_Renderer *ren, TTF_Font *font, const Lander *l,
                     const AutopilotState *ap, float kp_display)
 {
@@ -721,8 +758,9 @@ static void DrawHUD(SDL_Renderer *ren, TTF_Font *font, const Lander *l,
 }
 
 
-
-//======================================================================
+/**
+ * @brief safety score per  potential landing position
+ */
 float ComputeLandingZoneSafetyAtX(const Lander* l,
                                   const Hazard* hazards,
                                   int hazardCount,
@@ -775,12 +813,14 @@ float ComputeLandingZoneSafetyAtX(const Lander* l,
     return safety;
 }
 
-// -----------------------------------------------------------------------------
-// PredictiveScan()
-//   Scans a grid of candidate landing sites below and ahead of the lander.
-//   Fills ap->site_mem ring buffer with scored CandidateSite entries.
-//   Uses ComputeLandingZoneSafetyAtX() for each column center.
-// -----------------------------------------------------------------------------
+
+/**
+ * @brief PredictiveScan:   Scans a grid of candidate landing sites below and ahead of the lander.
+ * Fills ap->site_mem ring buffer with scored CandidateSite entries.
+ *  Uses ComputeLandingZoneSafetyAtX() for each column center.
+ * 
+ */
+
 void PredictiveScan(const Lander *l, const Hazard *hazards, int hazard_count,
                     AutopilotState *ap, float scan_ahead, float grid_spacing,
                     int grid_cols, int grid_rows)
@@ -811,11 +851,12 @@ void PredictiveScan(const Lander *l, const Hazard *hazards, int hazard_count,
     }
 }
 
-// -----------------------------------------------------------------------------
-// AddSiteMemory()
-//   Adds a new CandidateSite to the ring buffer inside AutopilotState.
-//   Keeps up to 16 entries (overwrites oldest).
-// -----------------------------------------------------------------------------
+
+/**
+ * @brief AddSiteMemory: sAdds a new CandidateSite to the ring buffer inside AutopilotState.
+ * Keeps up to 16 entries (overwrites oldest). * 
+ */
+
 void AddSiteMemory(AutopilotState *ap, const CandidateSite *site)
 {
     if (!ap || !site) return;
@@ -826,13 +867,12 @@ void AddSiteMemory(AutopilotState *ap, const CandidateSite *site)
 }
 
 
-// -----------------------------------------------------------------------------
-// SelectBestSite()  — improved "mid-gap" heuristic
-//   Chooses the best landing site from autopilot memory, preferring:
-//     (1) highest safety score
-//     (2) site closest to midpoint of largest clear gap between hazards
-//     (3) if tie, nearest to current lander position
-// -----------------------------------------------------------------------------
+/**
+ * @brief SelectBestSite: Chooses the best landing site from autopilot memory, preferring:
+ *  (1) highest safety score 
+ *  (2) site closest to midpoint of largest clear gap between hazards
+ * (3) if tie, nearest to current lander position
+ */
 CandidateSite SelectBestSite(const AutopilotState *ap, const Lander *l)
 {
     CandidateSite best = { .score = 0.0f, .x = l ? l->x : 0.0f };
@@ -907,6 +947,15 @@ CandidateSite SelectBestSite(const AutopilotState *ap, const Lander *l)
 }
 
 //======================================================================
+//   AUTOPILOT
+//====================================================================== 
+
+/**
+ * @brief Autopilot (imitating Apollo Guidance Computer PDI)
+ *
+ * Selects a landing site once at high altitude, manages descent and lateral
+ * control using PD terms, and introduces a flare near the surface.
+ */
 
 void AutoPilot_Update(Lander *l, AutopilotState *ap,
                              const Hazard *hazards, int hazardCount, float dt)
@@ -969,13 +1018,37 @@ void AutoPilot_Update(Lander *l, AutopilotState *ap,
     l->side_thrust_level = SIDE_BLEND_A * l->side_thrust_level +
                            SIDE_BLEND_B * desired_side;
 
-    // --- Vertical descent targets ---
-    float target_vy;
-    if      (altitude > ALT_VY_HIGH1) target_vy = VY_TARGET1;
-    else if (altitude > ALT_VY_HIGH2) target_vy = VY_TARGET2;
-    else if (altitude > ALT_VY_HIGH3) target_vy = VY_TARGET3;
-    else if (altitude > ALT_VY_HIGH4) target_vy = VY_TARGET4;
-    else                              target_vy = VY_TARGET_FINAL;
+    // --- Replace stepped vertical descent targets ---
+    //float target_vy;
+    //if      (altitude > ALT_VY_HIGH1) target_vy = VY_TARGET1;
+    //else if (altitude > ALT_VY_HIGH2) target_vy = VY_TARGET2;
+    //else if (altitude > ALT_VY_HIGH3) target_vy = VY_TARGET3;
+    //else if (altitude > ALT_VY_HIGH4) target_vy = VY_TARGET4;
+    //else                              target_vy = VY_TARGET_FINAL;
+
+	//  with linear interpolated vertical descent targets (smooths velocity profile)
+	float target_vy;
+
+	if (altitude > ALT_VY_HIGH1) {
+		target_vy = VY_TARGET1;
+	}
+	else if (altitude > ALT_VY_HIGH2) {
+		float t = (ALT_VY_HIGH1 - altitude) / (ALT_VY_HIGH1 - ALT_VY_HIGH2);
+		target_vy = VY_TARGET1 + t * (VY_TARGET2 - VY_TARGET1);
+	}
+	else if (altitude > ALT_VY_HIGH3) {
+		float t = (ALT_VY_HIGH2 - altitude) / (ALT_VY_HIGH2 - ALT_VY_HIGH3);
+		target_vy = VY_TARGET2 + t * (VY_TARGET3 - VY_TARGET2);
+	}
+	else if (altitude > ALT_VY_HIGH4) {
+		float t = (ALT_VY_HIGH3 - altitude) / (ALT_VY_HIGH3 - ALT_VY_HIGH4);
+		target_vy = VY_TARGET3 + t * (VY_TARGET4 - VY_TARGET3);
+	}
+	else {
+		float t = (ALT_VY_HIGH4 - altitude) / (ALT_VY_HIGH4 - ALT_VY_FINAL);
+		target_vy = VY_TARGET4 + t * (VY_TARGET_FINAL - VY_TARGET4);
+	}
+
 
     // --- Vertical PD controller ---
     float vy_err = target_vy - l->vy;
@@ -1038,13 +1111,18 @@ void AutoPilot_Update(Lander *l, AutopilotState *ap,
     }
 }
 
-
-
 //======================================================================
-// main program
+// SDL3 RENDERING AND MAIN LOOP
+//======================================================================
+
+/**
+ * @brief Entry point: initializes SDL3, runs simulation, rendering, HUD drawing
+ * and handles cleanup. * 
+ */
+
 int main(void) {
      
-     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO)) {
+     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) ){
         SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
         return 1;
     }
@@ -1059,30 +1137,7 @@ int main(void) {
     if (!font) {
         SDL_Log("Failed to load font: %s. HUD will be blank.", SDL_GetError());
     }
-    
-    //audio
-    SDL_AudioSpec spec;
-    char *wav_path = NULL;
-    SDL_AudioStream *bleep_stream = NULL;
-    Uint8 *wav_data = NULL;
-    Uint32 wav_data_len = 0;
       
-    SDL_asprintf(&wav_path, "%sassets/bleep.wav", SDL_GetBasePath());  /* allocate a string of the full file path */
-    if (!SDL_LoadWAV(wav_path, &spec, &wav_data, &wav_data_len)) {
-        SDL_Log("Couldn't load bleep .wav file: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
-     SDL_free(wav_path);  /* done with this string. */
-
-    /* Create our audio stream in the same format as the .wav file. It'll convert to what the audio hardware wants. */
-    bleep_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
-    if (!bleep_stream) {
-        SDL_Log("Couldn't create audio stream: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
-
-    SDL_ResumeAudioStreamDevice(bleep_stream);
-         
 
     SDL_Window* win = SDL_CreateWindow("Lunar Lander Simulator", WINDOW_WIDTH, WINDOW_HEIGHT, 0);
     SDL_Renderer* ren = SDL_CreateRenderer(win, NULL);
@@ -1242,15 +1297,7 @@ int main(void) {
 			ap.scan_last_time = 0.0;
 			PredictiveScan(&l, hazards, hc, &ap, 200.0f, 40.0f, 9, 1);
 		}
-				
-		//bleep (landing in progress)
-		static int cnt = 0;
-        if ((cnt++ % BLEEP_INTERVAL) == 0 && is_bleeping && !l.is_crashed && !l.is_landed) {
-		if (SDL_GetAudioStreamQueued(bleep_stream) < (int)wav_data_len) {		
-		SDL_PutAudioStreamData(bleep_stream, wav_data, wav_data_len);
-		}
-		}//if bleep interval
-
+		
         // Render
         SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
         SDL_RenderClear(ren);
