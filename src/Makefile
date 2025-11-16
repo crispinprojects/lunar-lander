@@ -1,30 +1,19 @@
-# Compiler and flags
-CC = gcc
-CFLAGS = -Wall -g $(shell pkg-config --cflags sdl3)
-LDFLAGS = $(shell pkg-config --libs sdl3) -lm -lSDL3_image -lSDL3_ttf
+# Makefile for OpenGL Lunar Lander Simulation
+# Usage:  make        (builds 'lander3d')
+#         make run    (runs the demo)
+#         make clean  (removes build products)
 
-# Source and target
-SRC = main.c
-OBJ = main.o
-TARGET = lunar
+CC      = gcc
+CFLAGS  = -Wall -O2
+LIBS    = -lSDL3 -lGL -lGLU -lm -lglut
+SRC     = main.c lander3d.c
+OUT     = lander3d
 
-# Default target to build the application
-all: $(TARGET)
+$(OUT): $(SRC)
+	$(CC) $(CFLAGS) -o $(OUT) $(SRC) $(LIBS)
 
-# Compile the object file from the source file
-$(OBJ): $(SRC)
-	$(CC) $(CFLAGS) -c $(SRC)
+run: $(OUT)
+	./$(OUT)
 
-# Link the object file to create the executable
-$(TARGET): $(OBJ)
-	$(CC) $(OBJ) -o $(TARGET) $(LDFLAGS)
-
-# Clean up the build files
 clean:
-	rm -f $(OBJ) $(TARGET) main
-
-run:
-	./$(TARGET) 
-
-# Declare phony targets (these aren't files)
-.PHONY: all clean run
+	rm -f $(OUT)

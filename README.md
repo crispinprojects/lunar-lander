@@ -1,35 +1,36 @@
-# Lunar Lander Simulation
+# Lunar Lander 3D Simulation
 
-Author: Alan Crispin (crispinalan)
-License: GNU General Public License v3.0 (GPL-3.0)
+A 3D physics-based lunar spacecraft descent simulation using OpenGL with real rotational dynamics and an autopilot that controls vertical descent using the main engine thruster and stabilises pitch, roll and yaw angles using side thrusters with closed-loop PD torque control. The simulation loop uses fixed-step physics.
 
-A 2D physics-based lunar spacecraft descent simulation using SDL3, designed for both educational and experimental purposes. The simulator implements a predictive glide autopilot, inspired by the Apollo Guidance Computer, which performs a high-altitude hazard scan and executes a multi-phase, PD-controlled descent adjusting both throttle and pitch angle
+The 3D lunar lander simulation attempts to mimic a real spacecraft control system such as that used with the Apollo Lunar Module descent engines, which actively modulated pitch/roll/yaw angles using RCS (Reaction Control System) thrusters. 
+    
+Some images of the 3D lunar lander simulation are shown below.
 
-An animated GIF (Graphics Interchange Format) file demonstrating the autopilot landing the lunar module is shown below.
-
-![](lunarlander.gif)
+![](lunar-lander3d-1.png)
   
-The GIF image file displays a sequence of images in succession to create a short, repeating animation of a lunar landing using the autopilot.
+![](lunar-lander3d-2.png)
+
+![](lunar-lander3d-3.png)
 
 ## Overview
 
-The purpose of the simulator is to model the descent of the Apollo Lunar Module (LEM) under realistic moon gravity taking mass and pitch angle into account. It was the Apollo Guidance Computer (autopilot) that landed men on the moon. Consequently, the focus of the work has been the development of the autopilot. The autopilot performs a predictive site selection and smooth staged descent. The predictive site selection is  a high-altitude scan to select a safe landing point in an attempt to imitate the  “landing point designator” approach used in the Apollo missions. The descent autopilot is inspired by the Apollo Lunar Module PDI (Powered Descent Initiation) sequence. Stage-dependent target velocities and gains provide smooth transitions between braking, controlled descent, and hover. The result is a mostly stable, repeatable landing sequence. In the simulation both altitude and pitch angle of the landing craft have to be controlled requiring the modelling of both translation and rotational dynamics (2D control).
+The purpose of the simulator is to model the descent of the Apollo style lunar lander under realistic moon gravity taking mass and pitch, roll and yaw angles into account. It was the Apollo Guidance Computer (autopilot) that landed men on the moon. Consequently, the focus of the work has been the development of the autopilot. The autopilot performs a smooth descent. 
 
-The simulator has been written in portable C and SDL3 and so can be compiled and run on Linux, macOS, and Windows. The simulator graphics are basic. The lunar module is drawn as a filled rotated rectangle using two triangles. The main and side thruster flames are drawn using triangles.  The moon landscape consists of a surface with rectangles representing hazards that have to be avoided.
+The simulator has been written in C and OpenGL and can be compiled and run on Linux. The simulator graphics are basic. The lunar module is drawn using cubes for the ascent and descent body modules and lines for the legs. The moon surface is drawn using a rectangular height field.
+
+I had originally planned to create the 3D lunar lander simulation using OpenGL and SDL3. SDL3 would manage input, windowing, and timing, while OpenGL handles 3D rendering and camera projection. However, this did not work out and so I have completely rewritten the simulator using standard C and OpenGL.
 
 ## Features
 
 List core features as concise bullet points:
 
-* Physics-accurate translational and rotational motion
-* Real-time SDL3 graphics and input
-* Autopilot with predictive site selection and staged descent
+* Physics-accurate rotational dynamics 
+* Autopilot with smooth descent
 * Integrated telemetry logging (autopilot_telemetry.csv)
-* Configurable tuning parameters for experimentation
 
 ## Apollo Missions
 
-Between 1969 and 1972 six NASA Apollo missions (Apollo 11,12,14,15,16 and 17) took astronauts to the moon using the Apollo Lunar Excursion Module or LEM. Each LEM  was able to take two of the three man Apollo crew to the moon so that overall 12 men were taken to the surface of the moon. When close to the moon the Apollo spacecraft established an elliptical parking orbit around the moon. The LEM was then uncoupled from the Command & Service Module which remained in moon orbit. The LEM then slowed and moved into an orbit that took it to about 8 miles (13 km) from the moon's surface and then initiated a PDI (Powered Descent Initiation) sequence to descent and land on the  moon surface. The simulation attempts to imitate the PDI descent stage of the LEM.
+The simulator has been inspired by the lunar landing Apollo missions. Between 1969 and 1972 six NASA Apollo missions (Apollo 11,12,14,15,16 and 17) took astronauts to the moon using the Apollo Lunar Excursion Module or LEM. Each LEM  was able to take two of the three man Apollo crew to the moon so that overall 12 men were taken to the surface of the moon. When close to the moon the Apollo spacecraft established an elliptical parking orbit around the moon. The LEM was then uncoupled from the Command & Service Module which remained in moon orbit. The LEM then slowed and moved into an orbit that took it to about 8 miles (13 km) from the moon's surface and then initiated a PDI (Powered Descent Initiation) sequence to descent and land on the  moon surface. 
 
 | Mission    |Landing Site                 | Notes                                                                                                      |
 |------------|-----------------------------|------------------------------------------------------------------------------------------------------------|
@@ -43,392 +44,297 @@ Between 1969 and 1972 six NASA Apollo missions (Apollo 11,12,14,15,16 and 17) to
 Mare Tranquillitatis was chosen as the first landing site because it was a huge impact basin considered flat and so suitable for landing and take-off. Apollo 11 LEM known as Eagle touched down about 4 miles (about 6 km) away from the target position. The landing sites for Apollo's 12, 14, 15, 17 were chosen on the basis of being low-lying and relatively flat. Apollo 12 landed in the a relatively flat area in the Sea of Storms to visit the Surveyor 3 probe (the only probe visited by humans on another world). The Apollo 16 landing site was Descartes Highlands which was a more heavily cratered site. Apollo 13 did not land on the moon due to an explosion in an oxygen tank and so ended up flying around the moon back to earth.
  
 
-## Coordinate System
+## Coordinate System and Angles
 
-When the lunar module is in free fall, it is pulled toward the Moon’s surface by **lunar gravity**, approximately:
+The simulation uses a right-handed world coordinate system:
+```
++X  - horizontal right
++Y  - vertical up (against gravity)
++Z  - horizontal forward
+```
+Moon gravity acts in -Y direction.
+  
+The lander orientation uses intrinsic Euler rotations in the order:
+```
+1. roll   about +Z axis
+2. pitch  about +Y axis
+3. yaw    about +X axis
+```
+
+Angles are stored in radians:
 
 ```
-const float GRAVITY = 1.62f;
+roll = φ      pitch = θ      yaw = ψ
+roll_rate = φ̇   pitch_rate = θ̇   yaw_rate = ψ̇
+
 ```
-This is about 16.6% of Earth's gravity, due to the Moon’s smaller mass and radius.
+The lander’s main engine thrust vector in local space is always (0, +1, 0) (straight “up” from the lander’s frame).
 
-The simulation uses a 2D Cartesian coordinate system where:
+## Reaction Control System (RCS) Forces & Torques
 
-(0, 0) is the top-left corner of the screen.
+Four side thrusters generate pitch and roll torques. The front thruster provides a positive pitch angle torque. The back thruster provides a negative pitch angle torque. The right thruster provides a positive roll angle torque. The left thruster provides negative roll angle torque. Two yaw thrusters generate yaw torque (yaw left and yaw right)
 
-The x-axis increases to the right.
+Side thrusters output force is proportional to their normalised level (0..1):
 
-The y-axis increases downwards.
-
-Thus, during free fall, the lander’s y value increases as it descends.
-
-The altitude (alt) above the surface is calculated using:
-```
-float alt = (float)(SURFACE_Y - lander->y);
-```
-If SURFACE_Y = 520 and lander->y = 20, then alt = 500.
-
-The → (arrow) operator is used to access members of a structure pointer. For example, lander->y retrieves the y coordinate of the lander structure.
+F_thruster = level · RCS_THRUST_MAX     (newtons)
 
 ## Lander Structure
 
 The lander’s physical and control state is stored in a structure:
-
 ```
 typedef struct {
-    float x, y;			//position
-    float vx, vy;		//velocity
-    float thrust_level;        // main engine throttle (0.0–1.0 )
-    float side_thrust_level;   // side thrusters (-1.0=left, +1.0=right)
-    float fuel;                // remaining fuel 
-    float angle;    
-    float dry_mass;            // dry mass (kg) of the lander **without** fuel     
-    float theta;     	   	// orientation radians (0 = upright engines down)
-    float omega;      		// angular velocity radians/sec    
-    bool thrust;   
+    Vec3 pos;
+    Vec3 vel;
+    Vec3 acc;
+    float pitch, roll, yaw;          // radians
+    float pitch_rate, roll_rate,yaw_rate;     // rad/s 
+    float mass; //mass
+    //float pitch_rate, roll_rate, yaw_rate; 
+	float Ixx, Iyy, Izz;   // principal moments of inertia (kg·m^2) 
+    // Main engine
+    float thrust_level;              // 0..1
+    // RCS (reaction control system) thruster levels
+    float rcs_front;                 // pitch down
+    float rcs_back;                  // pitch up
+    float rcs_left;                  // roll right
+    float rcs_right;                 // roll left
+    // Torques computed from RCS thrusters
+    float torque_pitch;              // about X-axis (pitch)
+    float torque_roll;               // about Z-axis (roll)  
+    float torque_yaw; 		    // about Y -axis (yaw)        
+	// RCS yaw thruster levels
+	float rcs_yaw_left;  // produces positive yaw torque (ccw around +Y)
+	float rcs_yaw_right; // produces negative yaw torque	
     bool is_landed;
-    bool is_crashed;
-    bool is_hovering;
-    bool hazard_ahead;  
-    bool left_thruster;
-    bool right_thruster;
-} Lander;
+    bool autopilot_enabled;
+} Lander3D;
 ```
 
-The craft has three engines:
+## Torques (τ) from Thruster Forces
 
-* One main engine for vertical thrust
-* Two side thrusters for lateral motion
-
-The fields thrust_level and side_thrust_level determine the normalized power levels of these engines.
-
-Fuel level is limited and decreases over time.
-
-
-##  Physics Model
-
-
-##  Translational and Rotational Dynamics
-
-The lunar lander behaves as a rigid body in 2D space. Its state is described by:
-
-
-| Symbol | Meaning                     | Units |
-|--------|---------------------------- |-------|
-| x, y   | Position                    | meters |
-| vx, vy | Velocity components         | m/s |
-| θ      | Orientation angle (radians) | rad |
-| ω      | Angular velocity            | rad/s |
-| FT     | Main engine thrust          | N |
-| FS     | Side thruster force         | N |
-| I      | Moment of inertia           | kg·m² |
-
-
-
-### Translational Motion (Linear Dynamics)
-
-According to Newton’s Second Law:
-
-F_net = m · a
-
-where `F_net` is the sum of gravity, thrust, and side forces. The vertical component of thrust controls altitude; the horizontal component controls drift.
-
-The simulator integrates velocity and position over time using **semi-implicit Euler**:
-
+Pitch torque (around X-like axis):
 ```
-v_next = v + a * dt
-x_next = x + v_next * dt
+τ_pitch = (F_front - F_back) · d
 ```
 
-This integration method is slightly more stable than the explicit form, especially with large accelerations.
+Roll torque (around Z-like axis):
+```
+τ_roll = (F_right - F_left) · w
+```
 
-### Rotational Motion (Angular Dynamics)
+Yaw torque (around Y axis):
+```
+τ_yaw = (F_yaw_left - F_yaw_right) · r_yaw
+```
 
-Rotation follows the angular version of Newton’s law:
+## Rotational Dynamics
 
+To describe a real spacecraft lunar landing like the Apollo mission a rigid-body physics model has to be developed to produce a controllable, tunable and realistic simulation. The physics symbols used in the equations below are defined Appendix Physics Symbols Table.
+
+The lander rotational dynamics follow the rigid-body equation:
+```
 τ = I · α
-
-where `τ` is torque, `I` is the moment of inertia, and `α` is angular acceleration.
-
-For a rectangular lander:
-
-I = (1/12) · m · (w² + h²)
-
-Heavier or wider landers have larger inertia and rotate more slowly.
-
-The autopilot applies a **pitch damping** control law:
-
-ω_cmd = −Kp * (θ − θ_target) − Kd * ω
-
-This combination of proportional (`Kp`) and derivative (`Kd`) terms stabilizes rotation much like a car’s suspension damps oscillations.
-
-### Coupled Dynamics
-
-Because the thrust vector is tilted by the pitch angle θ, both vertical and horizontal accelerations are linked:
-
-```
-ax = (FT / m) * sin(θ) + a_side
-ay = (FT / m) * cos(θ) − g
 ```
 
-At small angles, `cos(θ) ≈ 1`, so vertical control is dominated by the main engine while `sin(θ)` affects horizontal glide.
+That is, torque = moment of inertia x angular acceleration (like F=ma).
 
-
-### Control Objectives
-
-| Axis         | Actuator     | Control Type      | Goal |
-|:------------:|:-------------:|:----------------:|:-------:|
-| Vertical     | Main thruster | PD control on vy | Manage descent rate and touchdown |
-| Lateral      | Side thrusters | PD control on x | Glide to target site |
-| Rotational    | Torque control | PD control on θ | Keep lander upright |
-
-
-## Physics Integration Explained
-
-Every frame, the simulator integrates forces into motion using **semi-implicit Euler integration**. This technique first updates velocity, then uses that to update position:
+So angular accelerations for the pitch, roll and yaw angles are:
 
 ```
-v += a * dt
-x += v * dt
-```
-In contrast, explicit Euler (`x += v*dt; v += a*dt;`) can cause instability, especially when the acceleration changes rapidly for example, when thrust toggles or the lander rotates quickly.
-
-For rotation, the same logic applies:
-```
-ω += α * dt
-θ += ω * dt
-```
-This produces smooth angular motion and prevents runaway oscillation. The timestep `dt` is derived from SDL’s frame time (typically 1/60 s).
-
-These govern both manual and autopilot flight and are integrated numerically each frame in StepLander().
-
-## From Equations to Code
-
-| Physical Concept    | Equation                                 | Code Function                                                      |
-| ------------------- | ---------------------------------------- | ------------------------------------------------------------------ |
-| Vertical motion     | `a_y = (T/m) * cos(θ) - g`               | `StepLander()` integrates vertical acceleration and velocity       |
-| Horizontal motion   | `a_x = (T/m) * sin(θ)`                   | `StepLander()` integrates horizontal drift                         |
-| Rotational dynamics | `τ = I * α` and `I = (1/12)·m·(w² + h²)` | `StepLander()` computes moment of inertia and angular acceleration |
-| PD pitch control    | `ω̇ = -Kpθ - Kdω`                        | `ComputeRollControl()` damps and corrects tilt                     |
-| Descent profile     | `v_y_target(alt)` piecewise schedule     | `AutoPilot_Update()` defines smooth multi-phase descent            |
-| Lateral control     | `side_thrust = Kp·dx - Kd·vx`            | `AutoPilot_Update()` aligns over target                            |
-| Thrust modulation   | `thr = (g - a_y_des) / (T_max/m)`        | `AutoPilot_Update()` computes throttle ratio                       |
-
-###  Equation Definitions Table
-
-| Symbol | Description | Units | Appears In |
-|:-------:|:-------------|:-------|:------------|
-| **m** | Total mass of lander (dry mass + fuel mass) | kg | All dynamics equations |
-| **w**, **h** | Width and height of the rectangular lander | m | Moment of inertia |
-| **I** | Moment of inertia: resistance to angular acceleration (`I = (1/12)·m·(w² + h²)`) | kg·m² | Rotational dynamics |
-| **θ (theta)** | Pitch angle (0 = upright, positive clockwise) | radians | Thrust vectoring, rotation |
-| **ω (omega)** | Angular velocity | rad/s | Rotational integration |
-| **T** | Instantaneous main engine thrust | N (kg·m/s²) | Translational dynamics |
-| **Tₘₐₓ** | Maximum available thrust from main engine | N | Throttle modulation |
-| **thr** | Normalized throttle command (`0.0–1.0`) | — | Autopilot control loop |
-| **aₓ**, **a_y** | Horizontal and vertical acceleration | m/s² | Translational dynamics |
-| **a₍y,des₎** | Desired vertical acceleration (from PD controller) | m/s² | Thrust control law |
-| **g** | Lunar gravity (≈ 1.62 m/s²) | m/s² | Vertical motion |
-| **vₓ**, **v_y** | Horizontal and vertical velocity | m/s | State variables |
-| **x**, **y** | Horizontal and vertical position (surface coordinates) | m | World frame |
-| **τ (tau)** | Torque generated by off-center thrust | N·m | Rotational dynamics |
-| **Δt** | Time step between simulation frames | s | Numerical integration |
-| **Fₛ (side)** | Side thrust from lateral thrusters | N | Lateral control |
-| **Kp**, **Kd** | Proportional and derivative control gains | — | PD control equations |
-| **v₍y,target₎** | Target vertical velocity (altitude-dependent) | m/s | Autopilot descent logic |
-| **v₍y,err₎** | Vertical velocity error (`v₍y,target₎ – v_y`) | m/s | PD control |
-| **a₍y,des₎ = K_v·v₍y,err₎** | Desired acceleration from velocity error | m/s² | PD control output |
-| **mass_scale** | Normalization ratio `(nominal_mass / current_mass)` | — | Thrust modulation |
-| **hover_thr** | Hover throttle fraction `(g / (Tₘₐₓ/m))` | — | Descent stabilization |
-
-T/m  is the thrust-to-mass ratio, i.e. how much acceleration you get for each unit of thrust.
-
-### Physics Integration 
-
-### Translational Dynamics
-The lander’s position and velocity are integrated every frame:
-
-```
-vx += ax * dt
-vy += ay * dt
-x  += vx * dt
-y  += vy * dt
+α_pitch = τ_pitch / Ixx
+α_roll  = τ_roll  / Izz
+α_yaw   = τ_yaw   / Iyy
 ```
 
-Forces come from thrust (vector-decomposed via θ), gravity, and side thrusters.
-
-### Rotational Dynamics
-
-The lander rotates according to Newton’s rotational law:
+### Integrating angular rates
 
 ```
-torque = side_thrust * lever_arm
-α = torque / I
-ω += α * dt
-θ += ω * dt
-```
-
-The moment of inertia term
-
-`I = (1/12)·m·(w² + h²)`
-
-determines how resistant the lander is to changes in rotation. A wider/heavier craft resists rotation more.
-
-## Autopilot System
-
-The autopilot decomposes control into three independent PD loops:
-```
-Vertical PD loop adjusts throttle to achieve target descent rate.
-Lateral PD loop adjusts side thrust to keep position over target.
-Pitch loop damps attitude errors to maintain stability.
-```
-
-There is also a final descent flare phase. These are described below.
-
-###  1 Vertical Descent Control
-
-Goal: Maintain a safe vertical descent rate (`vy`).
+φ̇ += α_roll  · dt
+θ̇ += α_pitch · dt
+ψ̇ += α_yaw   · dt
 
 ```
-vy_error = target_vy − vy
-ay_des = Kv * vy_error
-thr = (g − ay_des) / (main_thrust_accel * mass_scale)
+### Rotational damping
+
+A simple viscous damping model prevents oscillations:
+```
+φ̇ -= φ̇ · D · dt
+θ̇ -= θ̇ · D · dt
+ψ̇ -= ψ̇ · D · dt
+
 ```
 
-Increasing `Kv` reacts faster but can cause oscillation.
-Decreasing `Kv` makes descent slower but smoother.
+Where D is a tunable damping constant (≈ 1.0–3.0).
 
-### 2 Lateral Glide Control
-
-Goal: Adjust side thrusters to glide toward the selected landing site.
+### Integrating attitude
 
 ```
-dx = target_x − x
-side_thrust = Kp_lat * dx − Kd_lat * vx
+φ += φ̇ · dt
+θ += θ̇ · dt
+ψ += ψ̇ · dt
+```
+Yaw is normalized to:
+```
+−π ≤ ψ ≤ +π
 ```
 
-`Kp_lat` pulls the lander toward the target.
-`Kd_lat` damps overshoot by opposing horizontal velocity.
+## Main Engine Thrust & Translation
 
-### 3 Pitch (Attitude) Control
-
-Goal: Keep the lander upright and stable (pitch stabilization).
+The main engine produces a force along the lander’s local +Y axis:
 
 ```
-θ_error = θ − θ_target
-ω_cmd = −Kp_theta * θ_error − Kd_theta * ω
+F_engine = (0, thrust_force, 0)
+thrust_force = thrust_level · ENGINE_THRUST
 ```
 
-The control law adds a natural **bias toward upright** orientation and **smooths angular velocity**, allowing stable hover and flare without sudden flips.
-.
+Convert to world coordinates using the Euler rotation matrix R(φ,θ,ψ):
+```
+F_world = R · F_engine
+```
+Acceleration in world space:
+```
+a_x = F_world.x / mass
+a_y = F_world.y / mass − g_lunar
+a_z = F_world.z / mass
+```
+Velocities:
+```
+v_x += a_x · dt
+v_y += a_y · dt
+v_z += a_z · dt
+```
+Positions:
+```
+x += v_x · dt
+y += v_y · dt
+z += v_z · dt
+```
 
-### Flare & Landing Logic
+## Autopilot 
 
-Below  FLARE_ALT (about 25 m), the autopilot transitions into a *flare* phase. It gradually raises thrust to decelerate smoothly before touchdown.
+The purpose of the autopilot is to control the following.
+```
+Vertical descent speed
+Pitch and roll stabilization
+Yaw stabilization
+Safe touchdown near zero velocity
+```
+Everything is powered by the main engine and the RCS side thrusters.
 
-The flare profile is tuned empirically:
+The autopilot is divided into three independent control loops. One for vertical descent, one for attitude control (pitch and roll) and one for yaw angle stabilisation.
+
+Each loop uses a Proportional (P) or Proportional plus Derviative (PD) controller to produce a controllable, tunable, and realistic simulation.
+
+#### Vertical Descent Controller (P-Control)
+
+The goal of the verical descent controller is to maintain a target descent rate of around  –3 m/s. Main engine thrust is controlled around a thrust level using a proportional controller. See equation below. 
 
 ```
-float thr = (GRAVITY - ay_des) / (MAIN_THRUST_ACCEL * mass_scale);
+thrust_cmd = thrust_level + Kp_v · (target_v − v_y)
+```
+This keeps the lander from either falling too fast or rising back into space.
+
+### Attitude Stabilization (Pitch & Roll PD Control)
+
+The goal of the attitude stabilization controller is to maintain pitch and roll angles at zero.
+To do this it computes the the torque for pitch and roll using the equations shown below.
+
+```
+τ_pitch_cmd = Kp_ang · (−pitch) + Kd_ang · (−pitch_rate)
+τ_roll_cmd  = Kp_ang · (−roll)  + Kd_ang · (−roll_rate)
+```
+These torques are converted into RCS thrust levels via the function:
+```
+apply_attitude_thrusters_from_torques()
 ```
 
-This helps prevent hard landings and compensates for fuel mass reduction near the surface.
+This produces front/back thrust from the pitch torque and left/right thrust from the roll torque.
+These stabilise lander angles before landing.
 
-### Predictive Site Selection (Terrain Safety)
+### Yaw Stabilization (Yaw PD Control)
 
-Terrain safety is determined through a predictive scan routine that evaluates several lateral positions below the vehicle, assigning each a safety score based on local hazard geometry. The white dots are the sample positions evaluated in each scan sweep. The highest-scoring site becomes the target landing point, shown visually as a green marker on the surface. The predictive, higher-altitude scan to select a landing point is attempting to simulate the  “landing point designator” approach used in the Apollo missions. The core functions and their purpose are shown below.
+The goal of the yaw control loop is to maintain the yaw angle at zero. To do this it computes yaw torque.
 
 ```
-PredictiveScan() 		-produces N white dots
-ComputeLandingZoneSafetyAtX()   -produces safety score per dot
-SelectBestSite()		-picks green dot (target) 
+τ_yaw_cmd = Kp_yaw · (−yaw) + Kd_yaw · (−yaw_rate)
 ```
-The PredictiveScan() function implements a simple loop scanning columns in front of the current lander and stores top candidates into ap->site_mem. ComputeLandingZoneSafetyAtX() accepts an x_center parameter and returns score. SelectBestSite() picks the best candidate (highest weighted score).
+This torque is converted to RCS yaw thrusters using the function:
+```
+apply_yaw_thrusters_from_torque()
+```
 
+### Touchdown Logic
+
+When the lander reaches the terrain plane (typically y = 0) all engines are turned off and pitch/roll angles set to zero.
+```
+if y ≤ 0:
+    y = 0
+    v = 0
+    φ = θ = ψ = 0
+    φ̇ = θ̇ = ψ̇ = 0
+    thrust_level = 0
+    RCS thrusters = 0
+    is_landed = true
+
+```
 
 ## Telemetry and Analysis
 
-The simulation logs telemetry to autopilot_telemetry.csv. The columns are shown below.
+The simulation logs autopilot telemetry to the file telemetry.csv which can be used for telemetry analysis of the autopilot.
 
-```
-time	stage	altitude	x	target_x	vx	vy	thr	side	angle
-```
-```
-time = simulation time
-stage = lander stage (1,2,3 etc.)
-altitude = the height above the lunar surface (lander)
-x =x-asis position
-targer_x = safe landing position
-vx = velocity x-axis
-vy = velocity y-axis
-thr= main engine thrust
-side = side thrust (-1.0=left, +1.0=right)
-angle = pitch angle
-```
+The altitude versus time plot shows a steady descent from 15000 m which is what is required for a safe landing.
 
-Running the simulation creates the CSV file called autopilot_telemetry.csv which can be used for telemetry analysis of the autopilot. The autopilot logic is structured in discrete stages representing key phases of a lunar descent. The stages are shown on the altitude versus time plot shown below.
+![](altitude_plot.png)
 
-![](autopilot-altitude-stages-plot.png)
+The pitch and roll angles versus time plots are shown below. Following an injection of pitch and roll disturbance at t=0 these show that the lander stabilizes the angles to zero.
 
-The shows a steady descent which is what is required for a safe landing.
+![](pitch_plot.png)
+![](roll_plot.png)
 
-The vertical velocity (vy) versus time plot for the autopilot is shown below.
-![](velocity_plot.png)
+A yaw angle disturbance is also stabilised. These plots confirm that the autopilot is correctly balancing thrust, descent rate and orientation.
 
-The first autopilot logic changed desired velocity targets at specific altitude thresholds using conditional statements leading 
- to a “staircase” shape in the velocity profile plot. Each time the lander crossed one of these altitude thresholds, the desired vertical velocity changed abruptly and so the throttle PD loop adjusted thrust in discrete steps. These transitions have been smoothed by linearly interpolating target_vy with altitude. The velocity plot now shows a smooth curve as the lander descends.
+## Build From Source
 
-The main engine throttle and side thrust profiles plotted again time during an autopilot landing are shown below.
-![](throttle_plot.png)
-
-The pitch angle versus time plot is shown below. There is a rapid correction in pitch angle at the start of the simulation, after which the lander stabilizes and transitions smoothly to a pitch angle near zero.
-
-![](angle_plot.png)
-
-These plots confirm that the autopilot is correctly balancing thrust, descent rate, and orientation.
-
-## Parameter Tuning 
-
-The simulation exposes a set of constants that model the lunar environment, engine power, and controller behaviour. Adjusting these values demonstrates how a closed-loop PD controller responds to different vehicle masses and  thrust-to-weight ratios. You can experiment with constants at the top of main.c.  See tuning Appendix.
-
-## Installation & Building
-
-SDL3 has been chosen for the 2D simulation because of
-
-* Cross-platform portability (Windows / Linux / macOS)
-* Simple event handling (keyboard, mouse)
-* Built-in timing and rendering loop
+The C source code is provided in the src directory. 
 
 ### Build From Source (Debian 13)
 
-The instructions below show how to build and run the simulator from source using Debian 13 Trixie. The simulator has been developed using Debian Trixie.
+The instructions below show how to build and run the simulator from source using Debian 13 Trixie. 
+The simulator has been developed using Debian Trixie.
 
 You need to install the following packages.
 
 ```
 sudo apt-get update
 sudo apt install build-essential
-sudo apt install pkg-config
-sudo apt install libsdl3-dev
 ```
-
-To check that SDL3 is installed use the following commands.
+Then install OpenGL and GLUT.
 
 ```
-pkg-config --libs sdl3
-pkg-config --cflags sdl3
+sudo apt install mesa-utils
+sudo apt install libglu1-mesa-dev
+sudo apt install freeglut3-dev
+sudo apt install mesa-common-dev
+```
+To check the OpenGL version use the command below.
+```
+glxinfo | grep "OpenGL version"
+```
+and then
+```
+dpkg -s libglu1-mesa
 ```
 
-Use the MAKEFILE in the src download to compile. 
+Use the MAKEFILE to compile the lunar lander simulator. 
 
 ```
 make
 ```
 
-To run the simulation from the terminal use
+To run the lundar lander simulation from the terminal use:
 
 ```
-./lunar
+./lander3d
 ```
 
 Make clean is also supported.
@@ -436,111 +342,38 @@ Make clean is also supported.
 ```
 make clean
 ```
-### Building from Source (Windows 11)
-
-The instructions below show how to build the simulator from source using Windows 11.
-
-You need to install the compiler MSYS2 (MinGW) on Windows 11. MSYS2 (Minimal SYStem 2) is a software development platform for Windows that provides a Unix-like environment, making it easier to build and run software ported from Linux. The official [MSYS2 website](https://www.msys2.org/). You then need to set up SDL3 on Windows 11. The official [SDL website](https://github.com/libsdl-org/SDL/releases). Follow the instructions below.
-
-1. **Install MSYS2 (MinGW)**  
-   - Download from [https://www.msys2.org/](https://www.msys2.org/)  
-   - Run the installer and follow the default setup instructions.
-
-2. **Install GCC (MinGW-w64)**  
-   In the MSYS2 terminal (Start → MSYS2 MINGW64):
-```
-bash
-pacman -Syu       # update all packages
-pacman -S mingw-w64-x86_64-gcc
-```
-3. **Install SDL3 development libraries**
-
-Download SDL3 prebuilt binaries from SDL releases
-Extract to a folder, e.g. C:\SDL3\.
-You should now have:
-```
-C:\SDL3\include
-C:\SDL3\lib
-
-```
-
-4. **Build the simulator**
-```
-gcc main.c -o lunar.exe -I/c/SDL3/include -L/c/SDL3/lib -lSDL3 -lm
-```
-5. **Run the simulation**
-Make sure these files are in the same directory:
-```
-lunar.exe
-SDL3.dll
-assets/
-```
-
-Then run:
-```
-./lunar.exe
-
-```
-Note: MinGW uses the same GCC compiler toolchain internally — only adapted for Windows paths and linking.
-
-### Building from Source (macOS)
-
-1. **Install SDL3 via Homebrew**
- ```
- bash
- brew install sdl3
- ```
- 
-2. **Compile**
-```
-gcc main.c -o lunar -lSDL3 -lm
-
-```
-3. **Run**
-```
-./lunar
-```
 
 ## Controls & Keyboard Commands
 
 Short table of keys:
 
-| Key   | Action           |
-| ----- | ---------------- |
-| ↑     | Main thrust      |
-| ← / → | Rotate           |
-| P     | Toggle autopilot |
-| R     | Reset lander     |
-| Esc   | Quit             |
+| Key   | Action             |
+| ----- | -------------------|
+| C     | Toggle camera mode |
+| R     | Restart	     |
+| Esc   | Quit 	             |
 
-You can switch off the autopilot using the P-key (Pilot key) and then fly the lunar module manually using the W(UP ARROW), A(LEFT ARROW) and D(RIGHT ARROW) keys. 
+The C key toggles the camera mode between orbit, overhead and chase.
 
+## Future Work 
 
-## Educational Objectives
-
-The simulator has been developed as a physics simulation of the Apollo moon landings and it is hoped that it may be useful for educational purposes. It is a practical example where it is necessary to understand physics, computer control systems, software development and real-time simulation.
-
-## Future Work (3D Simulation) 
-
-I am working on extending the simulation to 3D so that it should be possible to read a grayscale lunar height map (from e.g. NASA’s LRO data), sample it into a mesh and rendering it as a 3D surface.
-
-SDL3 alone cannot render 3D scenes, so [OpenGL](https://www.opengl.org/) would be required. However, the physics logic (StepLander, AutoPilot_Update, etc.) would still apply but would need to be extended to handle vectors instead of scalars. So an open source 3D simulation could be produced using OpenGL and SDL3. SDL3 would manage input, windowing, and timing, while OpenGL handles 3D rendering and camera projection.
-
-* Extending to 3D is a mathematical generalisation: every 2D equation simply gains a third axis term.
-* A new moment of inertia tensor replaces the scalar I.
-* In 2D, torque and angular acceleration are scalar; in 3D, they are vectors
-
-A 3D simulation would mimic a real spacecraft control such as the Apollo Lunar Module descent engines, which actively modulates gimbal pitch/yaw and use RCS (Reaction Control System) thrusters for roll control. 
+* Tuning of PD gains
+* Fuel usage model
+* Improved target site selection and steering to an alternate landing site if needed
+* Particles system for thrusters
+* Terrain modelling
 
 ## License
 
 The lunar lander simulator is released under the terms of the [GNU Lesser General Public License version 3.0](https://www.gnu.org/licenses/licenses.html). 
 
-Under no circumstances should you use the autopilot developed in this simulation to attempt to land a craft on the moon or any other planet. It has been developed for educational purposes. If in doubt consult a NASA engineer.
+Under no circumstances should you use the autopilot developed in this simulation to attempt to land a craft on the moon or any other planet. It has been developed for educational purposes. If in doubt consult a NASA engineer. 
 
-## Versioning
+## Version Control
 
-[SemVer](http://semver.org/) is used for versioning. The version number has the form 0.0.0 representing major, minor and bug fix changes.
+[SemVer](http://semver.org/) is used for version control. The version number has the form 0.0.0 representing major, minor and bug fix changes.
+
+The code will be updated as and when I find bugs or make improvement to the code base.
 
 ## Author
 
@@ -562,6 +395,8 @@ Active and under development.
 
 * [BBC Sky At Night: All 6 Apollo landing sites on the Moon](https://www.skyatnightmagazine.com/advice/skills/see-apollo-landing-sites-moon)
 
+* [LM Descent to the Moon - Part 1 - Theory and Software](https://dodlithr.blogspot.com/2014/08/lm-descent-to-moon-part-1-theory-and.html)
+
 * [SDL](https://www.libsdl.org/)
 
 * [chatGPT](https://chatgpt.com/)
@@ -573,37 +408,143 @@ Active and under development.
 * [Debian](https://www.debian.org/)
 
 
-## Appendix: Autopilot Tuning
-
-The key autopilot parameters which can be tuned are shown below.
-
-
-| Loop     | Adjust                      | If Oscillates | If Sluggish  | Units / Range                |
-| -------- | --------------------------- | ------------- | ------------ | ---------------------------- |
-| Vertical | `KV_VERTICAL`               | ↓ smaller     | ↑ larger     | 0.15–0.35                    |
-| Lateral  | `KP_LATERAL` / `KD_LATERAL` | ↓ KP or ↑ KD  | ↑ KP or ↓ KD | KP≈0.002–0.004, KD≈0.05–0.08 |
-| Attitude | `KP_THETA` / `KD_THETA`     | ↓ KP or ↑ KD  | ↑ KP or ↓ KD | KP≈0.15–0.25, KD≈0.40–0.55   |
-| Flare    | `HOVER_THRUST_FACTOR`       | ↓ factor      | ↑ factor     | 1.0–1.3 × hover_thr          |
-| Landing  | `MAX_VY/VX`                 | loosen (↑)    | tighten (↓)  | vx<2.5, vy<1.5 typical       |
-
-
-### Autopilot Tuning Log Template
-
-| Date | Constant(s) Changed | Previous Value(s) | New Value(s) | Effect Observed | Result / Notes |
-|------|---------------------|-------------------|---------------|------------------|----------------|
-| YYYY-MM-DD | `KV_VERTICAL` | 0.25 | 0.30 | Reduced hover, faster descent | Smoother transition between altitude bands |
-| YYYY-MM-DD | `KP_LATERAL`, `KD_LATERAL` | 0.0025, 0.06 | 0.003, 0.05 | Less lateral drift | Slight oscillation damped |
-| YYYY-MM-DD | `KP_THETA`, `KD_THETA` | 0.25, 0.40 | 0.22, 0.45 | Smaller angle overshoot | Critical damping near surface |
-| YYYY-MM-DD | `HOVER_THRUST_FACTOR` | 1.10 | 1.25 | Softer touchdown | Slight hover before landing |
-| YYYY-MM-DD | `MAX_VY_FOR_SAFE_LANDING` | 1.5 | 1.2 | Reduced bounce | Reliable landing detection |
-
-After each landing test, record tuning variables, what was observed and whether it improved or worsened the landing.
-
-### Approach Trajectory
-
-You can adjust the starting position and velocity in the  lander initialisation function called InitLander() to simulate a faster or a more offset approach trajectory. The lunar x-axis surface world is 8000 pixels and so to land in the 2000 pixel region you would set l→x to 2000.0f. To simulate a faster entry to the moon atmosphere increase l→vx. Some typical values are shown below.
+## Appendix: Physics Symbols Table 
 ```
-l->x = 3000.0f;
-l->vx = 20.0f;
+| Symbol                      | Meaning                                | Units         |
+| --------------------------- | -------------------------------------- | ------------- |
+| **x, y, z**                 | Lander world position                  | m             |
+| **v_x, v_y, v_z**           | World velocities                       | m/s           |
+| **a_x, a_y, a_z**           | World accelerations                    | m/s²          |
+| **φ (roll)**                | Roll angle (about Z-axis)              | rad           |
+| **θ (pitch)**               | Pitch angle (about X-axis)             | rad           |
+| **ψ (yaw)**                 | Yaw angle (about Y-axis)               | rad           |
+| **φ̇, θ̇, ψ̇**                 | Angular rates (roll/pitch/yaw)         | rad/s         |
+| **φ̈, θ̈, ψ̈**                 | Angular accelerations                  | rad/s²        |
+| **Ixx, Iyy, Izz**           | Principal moments of inertia           | kg·m²         |
+| **m**                       | Lander mass                            | kg            |
+| **g**                       | Lunar gravitational acceleration       | m/s²          |
+| **F_front, F_back**         | Upward forces from front/back RCS      | N             |
+| **F_left, F_right**         | Upward forces from left/right RCS      | N             |
+| **F_yaw_left, F_yaw_right** | Upward forces from yaw RCS             | N             |
+| **w, d, r_yaw**             | Lever arms (thruster offsets from CoM) | m             |
+| **τ_pitch, τ_roll, τ_yaw**  | Torques about pitch/roll/yaw axes      | N·m           |
+| **thrust_level**            | Main engine throttle (0..1)            | dimensionless |
+| **ENGINE_THRUST**           | Max main engine thrust                 | N             |
+| **RCS_THRUST_MAX**          | Max side-thruster force                | N             |
+| **F_engine**                | Main engine force vector               | N             |
+| **R(φ,θ,ψ)**                | Euler rotation matrix (local→world)    | —             |
+| **dt**                      | Simulation timestep                    | s             |
+| **D, D_yaw**                | Damping constants                      | 1/s           |
+| **target_v**                | Desired descent velocity               | m/s           |
+| **Kp_v**                    | Vertical velocity P-gain               | —             |
+| **Kp_ang, Kd_ang**          | Attitude PD gains                      | —             |
+| **Kp_yaw, Kd_yaw**          | Yaw PD gains                           | —             |
+```
+
+## Appendix: Summary of Core Equations
+
+Torque from forces:
+```
+τ = r × F
+```
+Angular acceleration:
+```
+α = τ / I
+```
+Euler rate integration:
+```
+ω += α · dt
+θ += ω · dt
+```
+Rotational damping:
+```
+ω -= ω · D · dt
+```
+Main engine thrust:
+```
+a = (R(φ,θ,ψ) · (0, thrust, 0)) / mass  −  (0, g, 0)
+```
+Linear integration:
+```
+v += a · dt
+p += v · dt
+```
+## Appendix: Flowchart
+
+The flowchart for the entire simulation matching program flow is shown below.
+
+```
++--------------------------------------------------------------+
+| Start Program                                                |
++--------------------------------------------------------------+
+                |
+                v
+       +--------------------+
+       | init_lander3d()    |
+       +--------------------+
+                |
+                v
+   +-----------------------------+
+   | Main Loop (renderScene)     |
+   +-----------------------------+
+                |
+                v
+   +-----------------------------+
+   | Accumulate frame time       |
+   +-----------------------------+
+                |
+                v
+   +-----------------------------+
+   | while accumulator >= dt     |
+   +-----------------------------+
+                |
+                v
+        +--------------------------+
+        | autopilot_test_harness() |
+        +--------------------------+
+                |
+                v
+        +--------------------------+
+        | autopilot_guided_full()  |
+        +--------------------------+
+                |
+                v
+        +--------------------------+
+        | update_lander3d()        |
+        +--------------------------+
+                |
+                v
+        +--------------------------+
+        | telemetry_log()          |
+        +--------------------------+
+                |
+                v
+        +--------------------------+
+        | accumulator -= dt        |
+        +--------------------------+
+                |
+                v
+   +-----------------------------+
+   | Rendering Phase             |
+   +-----------------------------+
+                |
+                v
+   +-----------------------------+
+   | glClear                     |
+   | update_camera               |
+   | draw_sky                    |
+   | draw_terrain                |
+   | draw_lander                 |
+   | draw_target_marker          |
+   | draw_HUD                    |
+   +-----------------------------+
+                |
+                v
+   +-----------------------------+
+   | swap buffers (double buf)   |
+   +-----------------------------+
+                |
+                v
+           repeat loop
 ```
 
