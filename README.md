@@ -22,11 +22,9 @@ I had originally planned to create the 3D lunar lander simulation using OpenGL a
 
 ## Features
 
-List core features as concise bullet points:
-
 * Physics-accurate rotational dynamics 
 * Autopilot with smooth descent
-* Integrated telemetry logging (autopilot_telemetry.csv)
+* Integrated autopilot telemetry logging (telemetry.csv)
 
 ## Apollo Missions
 
@@ -410,35 +408,35 @@ Active and under development.
 
 ## Appendix: Physics Symbols Table 
 ```
-| Symbol                      | Meaning                                | Units         |
-| --------------------------- | -------------------------------------- | ------------- |
-| **x, y, z**                 | Lander world position                  | m             |
-| **v_x, v_y, v_z**           | World velocities                       | m/s           |
-| **a_x, a_y, a_z**           | World accelerations                    | m/s²          |
-| **φ (roll)**                | Roll angle (about Z-axis)              | rad           |
-| **θ (pitch)**               | Pitch angle (about X-axis)             | rad           |
-| **ψ (yaw)**                 | Yaw angle (about Y-axis)               | rad           |
-| **φ̇, θ̇, ψ̇**                 | Angular rates (roll/pitch/yaw)         | rad/s         |
-| **φ̈, θ̈, ψ̈**                 | Angular accelerations                  | rad/s²        |
-| **Ixx, Iyy, Izz**           | Principal moments of inertia           | kg·m²         |
-| **m**                       | Lander mass                            | kg            |
-| **g**                       | Lunar gravitational acceleration       | m/s²          |
-| **F_front, F_back**         | Upward forces from front/back RCS      | N             |
-| **F_left, F_right**         | Upward forces from left/right RCS      | N             |
-| **F_yaw_left, F_yaw_right** | Upward forces from yaw RCS             | N             |
-| **w, d, r_yaw**             | Lever arms (thruster offsets from CoM) | m             |
-| **τ_pitch, τ_roll, τ_yaw**  | Torques about pitch/roll/yaw axes      | N·m           |
-| **thrust_level**            | Main engine throttle (0..1)            | dimensionless |
-| **ENGINE_THRUST**           | Max main engine thrust                 | N             |
-| **RCS_THRUST_MAX**          | Max side-thruster force                | N             |
-| **F_engine**                | Main engine force vector               | N             |
-| **R(φ,θ,ψ)**                | Euler rotation matrix (local→world)    | —             |
-| **dt**                      | Simulation timestep                    | s             |
-| **D, D_yaw**                | Damping constants                      | 1/s           |
-| **target_v**                | Desired descent velocity               | m/s           |
-| **Kp_v**                    | Vertical velocity P-gain               | —             |
-| **Kp_ang, Kd_ang**          | Attitude PD gains                      | —             |
-| **Kp_yaw, Kd_yaw**          | Yaw PD gains                           | —             |
+| Symbol                  | Meaning                                | Units         |
+| ----------------------- | -------------------------------------- | ------------- |
+| x, y, z                 | Lander world position                  | m             |
+| v_x, v_y, v_z           | World velocities                       | m/s           |
+| a_x, a_y, a_z           | World accelerations                    | m/s²          |
+| φ (roll)                | Roll angle (about Z-axis)              | rad           |
+| θ (pitch)               | Pitch angle (about X-axis)             | rad           |
+| ψ (yaw)                 | Yaw angle (about Y-axis)               | rad           |
+| φ̇, θ̇, ψ̇                 | Angular rates (roll/pitch/yaw)         | rad/s         |
+| φ̈, θ̈, ψ̈                 | Angular accelerations                  | rad/s²        |
+| Ixx, Iyy, Izz           | Principal moments of inertia           | kg·m²         |
+| m                       | Lander mass                            | kg            |
+| g                       | Lunar gravitational acceleration       | m/s²          |
+| F_front, F_back         | Upward forces from front/back RCS      | N             |
+| F_left, F_right         | Upward forces from left/right RCS      | N             |
+| F_yaw_left, F_yaw_right | Upward forces from yaw RCS             | N             |
+| w, d, r_yaw             | Lever arms (thruster offsets from CoM) | m             |
+| τ_pitch, τ_roll, τ_yaw  | Torques about pitch/roll/yaw axes      | N·m           |
+| thrust_level            | Main engine throttle (0..1)            | dimensionless |
+| ENGINE_THRUST           | Max main engine thrust                 | N             |
+| RCS_THRUST_MAX          | Max side-thruster force                | N             |
+| F_engine                | Main engine force vector               | N             |
+| R(φ,θ,ψ)                | Euler rotation matrix (local→world)    | —             |
+| dt                      | Simulation timestep                    | s             |
+| D, D_yaw                | Damping constants                      | 1/s           |
+| target_v                | Desired descent velocity               | m/s           |
+| Kp_v                    | Vertical velocity P-gain               | —             |
+| Kp_ang, Kd_ang          | Attitude PD gains                      | —             |
+| Kp_yaw, Kd_yaw          | Yaw PD gains                           | —             |
 ```
 
 ## Appendix: Summary of Core Equations
