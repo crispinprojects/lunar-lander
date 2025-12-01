@@ -37,6 +37,14 @@
 #define ENGINE_THRUST         22000.0f  // N (main engine max thrust) — example
 #define RCS_THRUST_MAX        2000.0f   // N (max vertical RCS thrust per thruster)
 
+#define PI 3.14159265358979323846f
+
+static const float thruster_dir_vec[3] = {1.0f, 0.0f, 0.0f}; // example
+static const float rcs_offset      = 0.7f;  // = rcs_height + 0.3
+static const float rcs_height      = 0.4f;
+static const float rcs_size        = 0.02f;
+
+
 // ----------------------------------------------------
 // 3D vector struct
 // ----------------------------------------------------
@@ -94,8 +102,10 @@ void draw_target_marker(float tx, float tz);
 void draw_text(int x, int y, const char *text);
 void init_lighting();
 // --- Camera ---
-void update_camera(Lander3D *L, float alpha, int cam_mode, float cam_distance);
+//void update_camera(Lander3D *L, float alpha, int cam_mode, float cam_distance);
+void update_camera(Lander3D *L, float alpha, int cam_mode, float cam_distance, float zoom);
 // --- Math helper (rotation) ---
 void rotate_by_euler(const float v[3], float roll, float pitch, float yaw, float out[3]);
+
 
 #endif // LANDER3D_H

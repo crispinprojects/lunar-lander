@@ -348,7 +348,9 @@ Short table of keys:
 | Key   | Action             |
 | ----- | -------------------|
 | C     | Toggle camera mode |
-| R     | Restart	     |
+| R     | Restart	     	 |
+| +	    | Zoom In            |
+| -	    | Zoom Out           |
 | Esc   | Quit 	             |
 
 The C key toggles the camera mode between orbit, overhead and chase.

@@ -24,9 +24,13 @@
 #include <time.h>
 #include <math.h>
 #include "lander3d.h"
+#include "particles.h"
 
 Lander3D lander;
 float target_x = 0.0f, target_y = 0.0f, target_z = 0.0f;
+
+float cam_zoom = 1.0f;    // default: no scaling
+
 
 // === Camera globals ===
 int cam_mode = 0;         // 3 = chase, 0 = orbit
@@ -84,6 +88,9 @@ static double now_seconds(void)
 static double accumulator = 0.0;
 static double t_prev = 0.0;
 
+// === Test Particles (P key) ===
+/*  Call once per frame if the flag is set   */
+
 
 // === Restart Simulation (R key) ===
 void restart_simulation(void)
@@ -105,7 +112,17 @@ void key_callback(unsigned char key, int x, int y)
         case 27: // ESC
             printf("[SYSTEM] Exiting simulation.\n");
             exit(0);
-            break;
+            break;	
+        case '+': case '=':
+		cam_zoom *= 1.05f;
+		if (cam_zoom > 4.0f) cam_zoom = 4.0f;
+		printf("cam_zoom = %f\n",cam_zoom);
+		break;
+		case '-': case '_':
+		cam_zoom /= 1.05f;
+		if (cam_zoom < 0.3f) cam_zoom = 0.3f;
+		printf("cam_zoom = %f\n",cam_zoom);
+		break;       
         case 'r':
         case 'R':
             restart_simulation();
@@ -143,23 +160,22 @@ void renderScene(void)
     if (frame_dt > MAX_FRAME) frame_dt = MAX_FRAME;
     t_prev = t_now;
     accumulator += frame_dt;
-
     // ---- Fixed-step physics ----   
     while (accumulator >= PHYS_DT) {   
-    autopilot_test_harness(&lander, (float)PHYS_DT); 
+    autopilot_test_harness(&lander, (float)PHYS_DT);        
     autopilot_guided_full(&lander, (float)PHYS_DT); 
-    update_lander3d(&lander, (float)PHYS_DT);
+    update_lander3d(&lander, (float)PHYS_DT);    
     sim_time += PHYS_DT;
     telemetry_log(&lander);
     accumulator -= PHYS_DT;
 	}	
-
     // ---- Rendering ----
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glLoadIdentity();  
-    update_camera(&lander, (float)(accumulator / PHYS_DT),cam_mode,cam_distance);
+    glLoadIdentity(); 
+    update_camera(&lander, (float)(accumulator / PHYS_DT),cam_mode,cam_distance,cam_zoom);   
     draw_sky();
-    draw_terrain();   
+    draw_terrain(); 
+    draw_particles(); 
     draw_lander(&lander);
     draw_target_marker(target_x, target_z);
     // ---- HUD ----
@@ -183,6 +199,7 @@ int main(int argc, char** argv)
 {
     //printf("Starting 3D lunar lander simulation\n");
     glutInit(&argc, argv);
+    //particles_init();
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
     glutInitWindowSize(1280, 720);
     glutCreateWindow("3D Lunar Lander Simulation");

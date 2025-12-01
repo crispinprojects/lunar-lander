@@ -19,6 +19,7 @@
  */
 
 #include "lander3d.h"
+#include "particles.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <GL/glut.h>
@@ -31,6 +32,11 @@ const float I_pitch = 2500.0f;   // kg·m²   adjust after testing
 const float I_roll  = 2500.0f;   // kg·m²
 extern float target_x; //globals exist in main.c
 extern float target_z;
+
+//static Particle particles[MAX_PARTICLES];
+//static int    first_free = 0;        /* next free slot in the array */
+
+//=====================================================================
 
 void init_lander3d(Lander3D *L)
 {
@@ -233,38 +239,161 @@ void update_lander3d(Lander3D *L, float dt)
     float local_thrust[3] = { 0.0f, 1.0f, 0.0f };
     float world_thrust[3];
     rotate_by_euler(local_thrust, L->roll, L->pitch, L->yaw, world_thrust);
+    
+    // -----------------------------------
+	// MAIN ENGINE PARTICLES
+	// -----------------------------------
+	float engine_x = L->pos.x;
+	float engine_y = L->pos.y - 2.4f;   // adjust visually
+	float engine_z = L->pos.z;
 
-    // world acceleration = thrust_acc * world_thrust + gravity
-    L->acc.x = thrust_acc * world_thrust[0];
-    L->acc.y = thrust_acc * world_thrust[1] - GRAVITY_LUNAR;
-    L->acc.z = thrust_acc * world_thrust[2];
+	// exhaust moves opposite the thrust
+	particles_emit_vel(
+		engine_x, engine_y, engine_z,
+		-world_thrust[0] * 8.0f,
+		-world_thrust[1] * 8.0f,
+		-world_thrust[2] * 8.0f,
+		L->thrust_level
+	);
+   
+	// ---------------------------------------------------------------------
+	// RCS THRUSTERS PARTICLES (4 vertical for pitch/roll + 2 lateral for yaw)
+	// ---------------------------------------------------------------------
 
-    // integrate linear velocities
-    L->vel.x += L->acc.x * dt;
-    L->vel.y += L->acc.y * dt;
-    L->vel.z += L->acc.z * dt;
+	const float rcs_offset = 2.075f;      // matches draw_lander
+	const float rcs_height = 1.0f;        
 
-    // integrate positions
-    L->pos.x += L->vel.x * dt;
-    L->pos.y += L->vel.y * dt;
-    L->pos.z += L->vel.z * dt;
+	// ========================================================
+	// LEFT RCS  (creates roll-left → right side comes down)
+	// ========================================================
+	if (L->rcs_left > 0.01f)
+	{
+		float px = L->pos.x - rcs_offset;
+		float py = L->pos.y + rcs_height;
+		float pz = L->pos.z;
 
-    // --------------------------------------------------------
-    // 3) GROUND COLLISION / TOUCHDOWN
-    // --------------------------------------------------------
-    if (L->pos.y <= 0.0f) {
-        L->pos.y = 0.0f;
-        L->vel.x = L->vel.y = L->vel.z = 0.0f;
-        L->pitch = 0.0f;
-        L->roll  = 0.0f;
-        L->pitch_rate = L->roll_rate = L->yaw_rate = 0.0f;
-        L->thrust_level = 0.0f;
-        L->rcs_front = L->rcs_back = L->rcs_left = L->rcs_right = 0.0f;
-        L->rcs_yaw_left = L->rcs_yaw_right = 0.0f;
-        L->is_landed = true;
-        printf("[LANDER] Touchdown detected.\n");
-    }
-}
+		// jet shoots upward visually
+		particles_emit_vel(
+			px, py, pz,
+			0.0f, 5.0f, 0.0f,
+			L->rcs_left
+		);
+	}
+
+	// ========================================================
+	// RIGHT RCS
+	// ========================================================
+	if (L->rcs_right > 0.01f)
+	{
+		float px = L->pos.x + rcs_offset;
+		float py = L->pos.y + rcs_height;
+		float pz = L->pos.z;
+
+		particles_emit_vel(
+			px, py, pz,
+			0.0f, 5.0f, 0.0f,
+			L->rcs_right
+		);
+	}
+
+	// ========================================================
+	// FRONT RCS (nose) — positive pitch torque = nose-up
+	// ========================================================
+	if (L->rcs_front > 0.01f)
+	{
+		float px = L->pos.x;
+		float py = L->pos.y + rcs_height;
+		float pz = L->pos.z - rcs_offset;
+
+		particles_emit_vel(
+			px, py, pz,
+			0.0f, 5.0f, 0.0f,
+			L->rcs_front
+		);
+	}
+
+	// ========================================================
+	// BACK RCS (tail)
+	// ========================================================
+	if (L->rcs_back > 0.01f)
+	{
+		float px = L->pos.x;
+		float py = L->pos.y + rcs_height;
+		float pz = L->pos.z + rcs_offset;
+
+		particles_emit_vel(
+			px, py, pz,
+			0.0f, 5.0f, 0.0f,
+			L->rcs_back
+		);
+	}
+
+	// ========================================================
+	// YAW LEFT  (positive yaw torque → CCW rotation)
+	// Jet points +X direction
+	// ========================================================
+	if (L->rcs_yaw_left > 0.01f)
+	{
+		float px = L->pos.x;
+		float py = L->pos.y + rcs_height;
+		float pz = L->pos.z - rcs_offset;
+
+		particles_emit_vel(
+			px, py, pz,
+			8.0f, 0.0f, 0.0f,     // sideways jet
+			L->rcs_yaw_left
+		);
+	}
+
+	// ========================================================
+	// YAW RIGHT (negative yaw torque → CW rotation)
+	// Jet points −X direction
+	// ========================================================
+	if (L->rcs_yaw_right > 0.01f)
+	{
+		float px = L->pos.x;
+		float py = L->pos.y + rcs_height;
+		float pz = L->pos.z + rcs_offset;
+
+		particles_emit_vel(
+			px, py, pz,
+			-8.0f, 0.0f, 0.0f,
+			L->rcs_yaw_right
+		);
+	}
+		
+		// world acceleration = thrust_acc * world_thrust + gravity
+		L->acc.x = thrust_acc * world_thrust[0];
+		L->acc.y = thrust_acc * world_thrust[1] - GRAVITY_LUNAR;
+		L->acc.z = thrust_acc * world_thrust[2];
+
+		// integrate linear velocities
+		L->vel.x += L->acc.x * dt;
+		L->vel.y += L->acc.y * dt;
+		L->vel.z += L->acc.z * dt;
+
+		// integrate positions
+		L->pos.x += L->vel.x * dt;
+		L->pos.y += L->vel.y * dt;
+		L->pos.z += L->vel.z * dt;
+
+		// --------------------------------------------------------
+		// 3) GROUND COLLISION / TOUCHDOWN
+		// --------------------------------------------------------
+		if (L->pos.y <= 0.0f) {
+			L->pos.y = 1.0f;
+			L->vel.x = L->vel.y = L->vel.z = 0.0f;
+			L->pitch = 0.0f;
+			L->roll  = 0.0f;
+			L->pitch_rate = L->roll_rate = L->yaw_rate = 0.0f;
+			L->thrust_level = 0.0f;
+			L->rcs_front = L->rcs_back = L->rcs_left = L->rcs_right = 0.0f;
+			L->rcs_yaw_left = L->rcs_yaw_right = 0.0f;
+			L->is_landed = true;
+			printf("[LANDER] Touchdown detected.\n");
+		}
+		particles_update(dt);
+	}
 
 // ===== Autopilot (3 loops) ===
 void autopilot_guided_full(Lander3D *L, float dt)
@@ -356,21 +485,20 @@ void autopilot_guided_full(Lander3D *L, float dt)
     }
 
     // console telemetry 
-    static float tel_timer = 0.0f;
-    tel_timer += dt;
-    if (tel_timer >= 1.0f) {
-		tel_timer = 0.0f;
-		printf("[AUTOPILOT] ALT:%.1f VY:%.2f THR:%.3f  PITCH:%.1f° ROLL:%.1f°\n",
-		L->pos.y, L->vel.y, L->thrust_level,
-		L->pitch * 180.0f / M_PI, L->roll * 180.0f / M_PI);
-		printf("[AUTOPILOT] PITCH/ROLL RCS F:%.2f B:%.2f L:%.2f R:%.2f  torqP:%.1f torqR:%.1f\n",
-		L->rcs_front, L->rcs_back, L->rcs_left, L->rcs_right,
-		L->torque_pitch, L->torque_roll);
-		printf("[AUTOPILOT] YAW:%.1f° YR:%.2f TYaw:%.1f R_L:%.2f R_R:%.2f\n",
-		L->yaw * 180.0f / M_PI, L->yaw_rate,
-		L->torque_yaw, L->rcs_yaw_left, L->rcs_yaw_right);
-
-    }    
+    //static float tel_timer = 0.0f;
+    //tel_timer += dt;
+    //if (tel_timer >= 1.0f) {
+		//tel_timer = 0.0f;
+		//printf("[AUTOPILOT] ALT:%.1f VY:%.2f THR:%.3f  PITCH:%.1f° ROLL:%.1f°\n",
+		//L->pos.y, L->vel.y, L->thrust_level,
+		//L->pitch * 180.0f / M_PI, L->roll * 180.0f / M_PI);
+		//printf("[AUTOPILOT] PITCH/ROLL RCS F:%.2f B:%.2f L:%.2f R:%.2f  torqP:%.1f torqR:%.1f\n",
+		//L->rcs_front, L->rcs_back, L->rcs_left, L->rcs_right,
+		//L->torque_pitch, L->torque_roll);
+		//printf("[AUTOPILOT] YAW:%.1f° YR:%.2f TYaw:%.1f R_L:%.2f R_R:%.2f\n",
+		//L->yaw * 180.0f / M_PI, L->yaw_rate,
+		//L->torque_yaw, L->rcs_yaw_left, L->rcs_yaw_right);
+    //}    
 }
 
 // ===================================================================
@@ -395,64 +523,77 @@ void autopilot_test_harness(Lander3D *L, float dt)
 }
 
 
-// ===== Update Camera (Orbit, Overhead and Chase Modes) =======
-void update_camera(Lander3D *L, float alpha, int cam_mode, float cam_distance)
+//now uses zoom factor
+void update_camera(Lander3D *L, float alpha, int cam_mode, float cam_distance, float cam_zoom)
 {
     if (!L) return;
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
 
-    // Basic camera distances (meters, tuned for 4 m lander)
-    const float cam_back_base = 60.0f;   // baseline chase distance behind craft
+    // --- Base camera geometry (metres) tuned for a ~4 m lander ---
+    const float cam_back_base = 60.0f;   // baseline chase/back distance
     const float cam_up_base   = 25.0f;   // baseline camera height above craft
 
-    // scale by user-controlled distance multiplier
-    float cam_back = cam_back_base * cam_distance;
-    float cam_up   = cam_up_base   * cam_distance;
+    // ---------- Zoom handling ----------
+    // cam_zoom > 1 -> closer view (zoom in)
+    // cam_zoom < 1 -> farther view (zoom out)
+    // We implement zoom by scaling the camera offsets (distance & height).
+    // Use division so increasing cam_zoom moves camera closer:
+    //   cam_back = cam_back_base * cam_distance / cam_zoom
+    // This keeps world geometry unchanged (no glScalef).
+    if (cam_zoom <= 0.0f) cam_zoom = 1.0f; // safety
+    float cam_back = (cam_back_base * cam_distance) / cam_zoom;
+    float cam_up   = (cam_up_base   * cam_distance) / cam_zoom;
 
-    switch (cam_mode) {
-    case 0: { // ORBIT - slowly circle the craft
-        static float orbit_angle = 0.0f;
-        orbit_angle += 0.002f;                 // slow angular speed
-        float radius = cam_back * 2.0f;        // orbit radius
+    switch (cam_mode)
+    {
+        case 0: // ORBIT
+        {
+            static float orbit_angle = 0.0f;
+            orbit_angle += 0.002f; // slow rotation (radians per frame step)
 
-        float cx = L->pos.x + radius * sinf(orbit_angle);
-        float cz = L->pos.z + radius * cosf(orbit_angle);
-        float cy = L->pos.y + cam_up;
+            float radius = cam_back * 2.0f;
+            float cx = L->pos.x + radius * sinf(orbit_angle);
+            float cz = L->pos.z + radius * cosf(orbit_angle);
+            float cy = L->pos.y + cam_up;
 
-        // standard up vector (Y-up) for orbit
-        gluLookAt(cx, cy, cz,
-                  L->pos.x, L->pos.y, L->pos.z,
-                  0.0f, 1.0f, 0.0f);
-    } break;
+            // Standard Y-up orbit camera
+            gluLookAt(cx, cy, cz,
+                      L->pos.x, L->pos.y, L->pos.z,
+                      0.0f, 1.0f, 0.0f);
+        } break;
 
-    case 1: { // OVERHEAD (top-down)
-        // place camera directly above (fixed safe offset) and look straight down.
-        // Note: view direction is mostly along -Y; choose an up-vector not parallel
-        // to the view direction — use (0,0,-1) so the screen "up" is world -Z.
-        float cx = L->pos.x;
-        float cz = L->pos.z;
-        float cy = L->pos.y + cam_up * 6.0f;   // overhead is higher for good coverage
+        case 1: // OVERHEAD (top-down)
+        {
+            // Put camera directly over craft and look straight down.
+            // NOTE: when view vector is nearly vertical, the gluLookAt "up" vector
+            // must NOT be parallel to view direction. Use (0,0,-1) so screen up
+            // corresponds to -Z world (gives stable orientation).
+            float cx = L->pos.x;
+            float cz = L->pos.z;
+            float cy = L->pos.y + cam_up * 6.0f; // higher overhead for coverage
 
-        gluLookAt(cx, cy, cz,
-                  L->pos.x, L->pos.y, L->pos.z,
-                  0.0f, 0.0f, -1.0f);
-    } break;
+            gluLookAt(cx, cy, cz,
+                      L->pos.x, L->pos.y, L->pos.z,
+                      0.0f, 0.0f, -1.0f);
+        } break;
 
-    default: { // CHASE (behind and slightly above, follows yaw)
-        float yaw = L->yaw;
-        // put camera behind the craft in its -Z local direction (world-space using yaw)
-        float cx = L->pos.x + cam_back * sinf(yaw);
-        float cz = L->pos.z + cam_back * cosf(yaw);
-        float cy = L->pos.y + cam_up;
+        default: // CHASE
+        {
+            float yaw = L->yaw;
+            // Put camera behind the craft in its local -Z direction (world-space)
+            float cx = L->pos.x + cam_back * sinf(yaw);
+            float cz = L->pos.z + cam_back * cosf(yaw);
+            float cy = L->pos.y + cam_up;
 
-        gluLookAt(cx, cy, cz,
-                  L->pos.x, L->pos.y, L->pos.z,
-                  0.0f, 1.0f, 0.0f);
-    } break;
+            gluLookAt(cx, cy, cz,
+                      L->pos.x, L->pos.y, L->pos.z,
+                      0.0f, 1.0f, 0.0f);
+        } break;
     } // switch
 }
+
 
 
 // ===== Initialise Lighting ===========
@@ -609,6 +750,7 @@ void draw_lander(Lander3D *L)
     // DESCENT STAGE (main lower box)
     // ------------------------------------------------------------
     glPushMatrix();
+        //glColor3f(1.0f, 0.5f, 0.2f);
         glColor3f(0.75f, 0.75f, 0.78f);
         glScalef(descent_w, descent_h, descent_w);
         glutSolidCube(1.0f);
@@ -620,6 +762,7 @@ void draw_lander(Lander3D *L)
     glPushMatrix();
         glTranslatef(0.0f, (descent_h + ascent_h) * 0.5f, 0.0f);
         glColor3f(0.85f, 0.82f, 0.75f);
+        //glColor3f(0.2f, 1.0f, 0.5f);
         glScalef(ascent_w, ascent_h, ascent_w * 1.2f);
         glutSolidCube(1.0f);
     glPopMatrix();
@@ -635,7 +778,8 @@ void draw_lander(Lander3D *L)
         glColor3f(0.6f, 0.6f, 0.65f);
         glutSolidCone(thruster_r, thruster_h, 16, 4);
     glPopMatrix();
-
+	
+	
     // ------------------------------------------------------------
     // LANDING LEGS (lines at corners, ~20° angle)
     // ------------------------------------------------------------
@@ -686,6 +830,26 @@ void draw_lander(Lander3D *L)
 	}   
    
     glPopMatrix();
+    
+    // =============================================================
+	// YAW RCS (sideways pointing thrusters)
+	// =============================================================
+	glColor3f(0.9f, 0.9f, 0.95f);
+
+	// yaw-left thruster (front-left side)
+	glPushMatrix();
+	glTranslatef(0.0f, rcs_height, -rcs_offset);
+	glRotatef(90, 0,1,0);  // rotate 90° so jet points sideways
+	glutSolidCube(rcs_size);
+	glPopMatrix();
+
+	// yaw-right thruster (back-right side)
+	glPushMatrix();
+	glTranslatef(0.0f, rcs_height, rcs_offset);
+	glRotatef(90, 0,1,0);
+	glutSolidCube(rcs_size);
+	glPopMatrix();
+    
 }
 
 //==== Landing target ===========
